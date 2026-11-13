@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	* {
+		-webkit-tap-highlight-color: transparent;
+		touch-action: manipulation;
+	}
+
+	body {
+		@apply font-sans bg-black;
+	}
+}
+
+@layer components {
+	/* Neo-Brutal Button Base */
+	.btn-brutal {
+		@apply border-2 border-black font-bold shadow-brutal
+		active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
+		transition-all duration-75 cursor-pointer select-none;
+	}
+
+	.btn-yellow {
+		@apply btn-brutal bg-brand-yellow text-black;
+	}
+
+	.btn-purple {
+		@apply btn-brutal bg-brand-purple text-white;
+	}
+
+	.btn-lime {
+		@apply btn-brutal bg-brand-lime text-black;
+	}
+
+	.btn-veto {
+		@apply btn-brutal bg-brand-veto text-white;
+	}
+
+	.btn-white {
+		@apply btn-brutal bg-white text-black;
+	}
+
+	/* Swipe labels */
+	.swipe-label-gas {
+		@apply absolute top-6 left-6 rotate-[-12deg] border-4 border-brand-lime
+		text-brand-lime font-mono font-bold text-3xl px-3 py-1 rounded-sm opacity-0 pointer-events-none;
+	}
+
+	.swipe-label-skip {
+		@apply absolute top-6 right-6 rotate-[12deg] border-4 border-brand-veto
+		text-brand-veto font-mono font-bold text-3xl px-3 py-1 rounded-sm opacity-0 pointer-events-none;
+	}
+
+	/* Jagged receipt edge */
+	.receipt-top {
+		background: linear-gradient(-45deg, #fff 8px, transparent 0),
+			linear-gradient(45deg, #fff 8px, transparent 0);
+		background-size: 16px 16px;
+		background-position: left top;
+		background-repeat: repeat-x;
+		height: 16px;
+		width: 100%;
+	}
+
+	.receipt-bottom {
+		background: linear-gradient(-45deg, transparent 8px, #fff 0),
+			linear-gradient(45deg, transparent 8px, #fff 0);
+		background-size: 16px 16px;
+		background-position: left top;
+		background-repeat: repeat-x;
+		height: 16px;
+		width: 100%;
+	}
+}
+
+@layer utilities {
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+	.no-scrollbar {
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+	}
+}
