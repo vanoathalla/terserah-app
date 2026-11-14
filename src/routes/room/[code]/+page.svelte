@@ -3,21 +3,61 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { room } from '$lib/realtimeRoom.svelte';
-	import { MOCK_PLACES, fetchOverpassPlaces, pickRandom } from '$lib/mockPlaces';
+	import { MOCK_PLACES, fetchOverpassPlaces, fetchPlacesByCity, pickRandom, type Place } from '$lib/mockPlaces';
 	import SwipeCard from '$lib/components/SwipeCard.svelte';
 	import ReceiptResult from '$lib/components/ReceiptResult.svelte';
 	import PlayerAvatars from '$lib/components/PlayerAvatars.svelte';
 	import QRCode from '$lib/components/QRCode.svelte';
 
-	const code = $page.params.code;
+	const code = $page.params.code ?? '';
 	const shareUrl = typeof window !== 'undefined'
 		? `${window.location.origin}/room/${code}`
 		: `/room/${code}`;
 
-	// ── Demo / GPS mode ───────────────────────────────────────
-	let demoMode = $state(true);
+	// ── Data Source Mode: 'mock' | 'osm' ─────────────────────
+	let dataSource = $state<'mock' | 'osm'>('mock');
+	let osmMode = $state<'gps' | 'city'>('city');
+	let selectedCity = $state('Jakarta');
+	let customCity = $state('');
+	let gpsCoords = $state<{ lat: number; lon: number } | null>(null);
+	let detectingGps = $state(false);
 	let loadingPlaces = $state(false);
-	let gpsError = $state('');
+	let gpsStatus = $state('');
+
+	const PRESET_CITIES = ['Jakarta', 'Bandung', 'Jogja', 'Surabaya', 'Bali'];
+
+	// ── GPS Helper ───────────────────────────────────────────
+	async function detectGps() {
+		if (typeof window === 'undefined' || !navigator.geolocation) {
+			gpsStatus = '⚠️ Browser membatasi GPS di HTTP / IP LAN. Pakai pilihan kota di bawah ya!';
+			osmMode = 'city';
+			return;
+		}
+
+		detectingGps = true;
+		gpsStatus = '🛰️ Meminta izin GPS browser...';
+
+		try {
+			const pos = await new Promise<GeolocationPosition>((res, rej) =>
+				navigator.geolocation.getCurrentPosition(res, rej, {
+					timeout: 8000,
+					maximumAge: 60000,
+					enableHighAccuracy: false
+				})
+			);
+			gpsCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+			osmMode = 'gps';
+			gpsStatus = `✅ GPS aktif! (${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)})`;
+		} catch (e) {
+			const msg = e instanceof GeolocationPositionError
+				? ['Izin GPS ditolak di browser', 'GPS tidak tersedia', 'Waktu deteksi GPS habis'][e.code - 1]
+				: 'Gagal deteksi GPS';
+			gpsStatus = `⚠️ ${msg}. Otomatis pakai mode kota: ${selectedCity}.`;
+			osmMode = 'city';
+		} finally {
+			detectingGps = false;
+		}
+	}
 
 	// ── Swipe card ref ────────────────────────────────────────
 	let topCardRef = $state<{ triggerSwipe: (dir: 'gas' | 'skip') => void } | null>(null);
@@ -50,27 +90,67 @@
 	// ── Host starts game ──────────────────────────────────────
 	async function startGame() {
 		loadingPlaces = true;
-		gpsError = '';
+		gpsStatus = '';
 		try {
-			let places;
-			if (demoMode) {
+			let places: Place[] = [];
+			if (dataSource === 'mock') {
 				places = pickRandom(MOCK_PLACES, 10);
 			} else {
-				const pos = await new Promise<GeolocationPosition>((res, rej) =>
-					navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000 })
-				);
-				try {
-					places = await fetchOverpassPlaces(pos.coords.latitude, pos.coords.longitude, 1500);
-					if (places.length < 5) places = [...places, ...pickRandom(MOCK_PLACES, 10 - places.length)];
-					places = places.slice(0, 10);
-				} catch {
-					gpsError = 'Overpass API error, pakai data mock.';
-					places = pickRandom(MOCK_PLACES, 10);
+				// OpenStreetMap Mode
+				gpsStatus = '📡 Mengambil tempat dari OpenStreetMap...';
+
+				if (osmMode === 'gps' && gpsCoords) {
+					try {
+						places = await fetchOverpassPlaces(gpsCoords.lat, gpsCoords.lon, 1500);
+					} catch {
+						const city = selectedCity || 'Jakarta';
+						gpsStatus = `GPS OSM sedikit lambat, mengambil tempat di ${city}...`;
+						places = await fetchPlacesByCity(city);
+					}
+				} else if (osmMode === 'gps') {
+					// User selected GPS but hasn't run detect yet
+					if (typeof navigator !== 'undefined' && navigator.geolocation) {
+						try {
+							const pos = await new Promise<GeolocationPosition>((res, rej) =>
+								navigator.geolocation.getCurrentPosition(res, rej, {
+									timeout: 6000,
+									maximumAge: 60000,
+									enableHighAccuracy: false
+								})
+							);
+							gpsCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+							places = await fetchOverpassPlaces(gpsCoords.lat, gpsCoords.lon, 1500);
+						} catch {
+							const city = selectedCity || 'Jakarta';
+							gpsStatus = `GPS tidak diizinkan, mencari di ${city}...`;
+							places = await fetchPlacesByCity(city);
+						}
+					} else {
+						const city = selectedCity || 'Jakarta';
+						gpsStatus = `GPS butuh HTTPS, mencari di ${city}...`;
+						places = await fetchPlacesByCity(city);
+					}
+				} else {
+					// City Mode
+					const targetCity = customCity.trim() || selectedCity || 'Jakarta';
+					places = await fetchPlacesByCity(targetCity);
 				}
+
+				// If OSM returned fewer than 10 places, blend with mock places to guarantee 10
+				if (places.length < 10) {
+					const needed = 10 - places.length;
+					places = [...places, ...pickRandom(MOCK_PLACES, needed)];
+				}
+				places = places.slice(0, 10);
 			}
+
+			gpsStatus = '';
 			room.sendGameStart(places);
 		} catch (e) {
-			gpsError = 'Gagal ambil lokasi. Aktifkan GPS atau pakai Demo Mode.';
+			console.error(e);
+			gpsStatus = 'Gagal ambil OSM, otomatis pakai mock data.';
+			const places = pickRandom(MOCK_PLACES, 10);
+			room.sendGameStart(places);
 		} finally {
 			loadingPlaces = false;
 		}
@@ -101,9 +181,9 @@
 		if (!room.connected) {
 			const saved = room.loadIdentity();
 			if (saved) {
-				room.reconnect().catch(() => goto('/'));
+				room.reconnect(code).catch(() => goto(`/?join=${code}`));
 			} else {
-				goto('/');
+				goto(`/?join=${code}`);
 			}
 		}
 	});
@@ -185,38 +265,97 @@
 		<!-- Host controls -->
 		{#if room.isHost}
 			<div class="bg-white border-2 border-black p-4 shadow-brutal">
-				<div class="text-xs font-mono font-bold text-gray-500 tracking-widest mb-3">— PENGATURAN HOST —</div>
+				<div class="text-xs font-mono font-bold text-gray-500 tracking-widest mb-3">— PENGATURAN TEMPAT —</div>
 
-				<div class="flex items-center justify-between mb-3">
-					<div>
-						<div class="font-mono font-bold text-sm">🎭 Demo Mode</div>
-						<div class="text-xs text-gray-500">Data mock (cepet, tanpa GPS)</div>
-					</div>
+				<!-- Source selector -->
+				<div class="grid grid-cols-2 gap-2 mb-3">
 					<button
-						class="relative w-12 h-6 border-2 border-black transition-colors"
-						class:bg-brand-lime={demoMode}
-						class:bg-gray-200={!demoMode}
-						onclick={() => { demoMode = !demoMode; gpsError = ''; }}
-						role="switch"
-						aria-checked={demoMode}
-						aria-label="Toggle Demo Mode"
+						class="py-2.5 px-2 border-2 border-black font-mono text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer"
+						class:bg-brand-yellow={dataSource === 'mock'}
+						class:shadow-brutal-sm={dataSource === 'mock'}
+						class:bg-gray-100={dataSource !== 'mock'}
+						class:text-gray-500={dataSource !== 'mock'}
+						onclick={() => { dataSource = 'mock'; gpsStatus = ''; }}
 					>
-						<span class="absolute top-0.5 w-4 h-4 bg-black transition-transform"
-							class:translate-x-0.5={!demoMode}
-							class:translate-x-6={demoMode}
-						></span>
+						<span class="text-lg">🎭</span>
+						<span>Mock Demo</span>
+						<span class="text-[10px] font-normal opacity-75">12 Tempat Hits</span>
+					</button>
+
+					<button
+						class="py-2.5 px-2 border-2 border-black font-mono text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer"
+						class:bg-brand-lime={dataSource === 'osm'}
+						class:shadow-brutal-sm={dataSource === 'osm'}
+						class:bg-gray-100={dataSource !== 'osm'}
+						class:text-gray-500={dataSource !== 'osm'}
+						onclick={() => { dataSource = 'osm'; gpsStatus = ''; }}
+					>
+						<span class="text-lg">🗺️</span>
+						<span>Open Maps</span>
+						<span class="text-[10px] font-normal opacity-75">OpenStreetMap</span>
 					</button>
 				</div>
 
-				{#if !demoMode}
-					<div class="text-xs text-gray-500 bg-brand-cream border border-dashed border-gray-300 p-2 mb-2">
-						📍 Akan ambil tempat dari OpenStreetMap di sekitar GPS kamu
+				{#if dataSource === 'osm'}
+					<div class="bg-brand-cream border-2 border-black p-3 mb-3 flex flex-col gap-2.5 text-xs font-mono">
+						<div class="font-bold flex items-center justify-between">
+							<span>📍 PILIH LOKASI PETA:</span>
+							{#if gpsCoords}
+								<span class="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 border border-green-700">GPS Terdeteksi</span>
+							{/if}
+						</div>
+
+						<!-- GPS Button -->
+						<button
+							class="w-full py-2 px-3 border-2 border-black font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+							class:bg-white={osmMode !== 'gps'}
+							class:bg-brand-lime={osmMode === 'gps'}
+							class:shadow-brutal-sm={osmMode === 'gps'}
+							onclick={detectGps}
+							disabled={detectingGps}
+						>
+							{#if detectingGps}
+								<span>⏳</span><span>Mendeteksi GPS...</span>
+							{:else}
+								<span>🛰️</span><span>Pakai GPS Saya</span>
+							{/if}
+						</button>
+
+						<!-- Preset cities -->
+						<div>
+							<div class="text-[10px] text-gray-500 mb-1.5 font-bold">ATAU PILIH KOTA TERDEKAT:</div>
+							<div class="flex flex-wrap gap-1">
+								{#each PRESET_CITIES as city}
+									<button
+										class="px-2.5 py-1 border border-black font-bold text-xs transition-all cursor-pointer"
+										class:bg-black={selectedCity === city && osmMode === 'city' && !customCity}
+										class:text-white={selectedCity === city && osmMode === 'city' && !customCity}
+										class:bg-white={!(selectedCity === city && osmMode === 'city' && !customCity)}
+										onclick={() => { selectedCity = city; customCity = ''; osmMode = 'city'; gpsStatus = `Kota dipilih: ${city}`; }}
+									>
+										{city}
+									</button>
+								{/each}
+							</div>
+						</div>
+
+						<!-- Custom city input -->
+						<div class="flex items-center gap-1.5 border border-black bg-white px-2 py-1">
+							<span class="text-gray-400">🔍</span>
+							<input
+								type="text"
+								bind:value={customCity}
+								placeholder="Atau ketik kota (Malang, Medan...)"
+								class="w-full bg-transparent text-xs font-bold outline-none font-mono"
+								oninput={() => { if (customCity) { osmMode = 'city'; } }}
+							/>
+						</div>
 					</div>
 				{/if}
 
-				{#if gpsError}
-					<div class="text-xs text-brand-veto font-mono border border-brand-veto bg-red-50 p-2 mb-2">
-						⚠️ {gpsError}
+				{#if gpsStatus}
+					<div class="text-xs font-mono border-2 border-black p-2.5 mb-3 bg-brand-cream shadow-brutal-sm">
+						{gpsStatus}
 					</div>
 				{/if}
 
@@ -231,7 +370,7 @@
 					onclick={startGame}
 					disabled={loadingPlaces || room.allPlayersCount < 1}
 				>
-					{loadingPlaces ? '⏳ Loading tempat...' : `🚀 MULAI! (${room.allPlayersCount} pemain)`}
+					{loadingPlaces ? '⏳ Loading tempat Open Maps...' : `🚀 MULAI! (${room.allPlayersCount} pemain)`}
 				</button>
 
 				{#if room.allPlayersCount < 2}

@@ -7,8 +7,13 @@
 import type { Place } from './mockPlaces';
 
 // Re-export server types for use in components
-export type { Player as PlayerPresence, GameResult, PlaceScore, DramaStats, PlayerAction } from './server/roomServer';
-import type { Player as PlayerPresence, GameResult, PlaceScore, ServerMsg } from './server/roomServer';
+export type { GameResult, PlaceScore, DramaStats, PlayerAction } from './server/roomServer';
+import type { Player, GameResult, PlaceScore, ServerMsg } from './server/roomServer';
+
+export interface PlayerPresence extends Player {
+	justSwiped?: boolean;
+	online?: boolean;
+}
 
 export type SwipeAction = 'gas' | 'skip' | 'veto';
 export type GamePhase = 'lobby' | 'playing' | 'result';
@@ -158,9 +163,18 @@ export class RoomState {
 		switch (msg.type) {
 			case 'ROOM_STATE': {
 				const newMap = new Map<string, PlayerPresence>();
-				for (const p of msg.players) newMap.set(p.id, { ...p, justSwiped: false });
+				for (const p of msg.players) newMap.set(p.id, { ...p, justSwiped: false, online: true });
 				this.players = newMap;
 				this.phase = msg.phase as GamePhase;
+				if (this.phase === 'lobby') {
+					this.gameResult = null;
+					this.places = [];
+					this.actions = [];
+					this.currentCardIndex = 0;
+					this.timeLeft = 45;
+					this.vetoUsed = false;
+					this.myActions = new Map();
+				}
 				this.connected = true;
 				// Set self
 				const pid = this.getOrCreatePlayerId();
@@ -300,11 +314,12 @@ export class RoomState {
 
 	// ── Reconnect ─────────────────────────────────────────────
 
-	async reconnect() {
+	async reconnect(overrideCode?: string) {
 		const saved = this.loadIdentity();
-		if (!saved || !this.roomCode) return;
+		const code = (overrideCode || this.roomCode || '').toUpperCase();
+		if (!saved || !code) return;
 		try {
-			await this.connect(this.roomCode, saved.name, saved.avatar, this.isHost);
+			await this.connect(code, saved.name, saved.avatar, this.isHost);
 		} catch {
 			// ignore reconnect errors silently
 		}
@@ -318,6 +333,7 @@ export class RoomState {
 	}
 
 	resetForNewGame() {
+		this.send({ type: 'RESET_ROOM' });
 		this.phase = 'lobby';
 		this.gameResult = null;
 		this.places = [];

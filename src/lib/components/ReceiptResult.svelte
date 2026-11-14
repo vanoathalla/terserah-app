@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { toPng } from 'html-to-image';
 	import type { GameResult, PlaceScore } from '$lib/realtimeRoom.svelte';
+	import { getMapUrl, getOsmUrl } from '$lib/mockPlaces';
 
 	interface Props {
 		result: GameResult;
@@ -90,6 +91,28 @@
 					<div class="text-2xl">{result.winner.place.emoji}</div>
 					<div class="font-bold text-base mt-1">{result.winner.place.name}</div>
 					<div class="text-xs text-gray-700 mt-0.5">{result.winner.place.vibe}</div>
+					<div class="text-xs text-gray-600 mt-1 font-mono truncate">📍 {result.winner.place.address}</div>
+					<div class="mt-2.5 flex gap-1.5 justify-center">
+						<a
+							href={getMapUrl(result.winner.place)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="flex-1 bg-black text-white py-1.5 px-3 text-xs font-bold font-mono text-center
+								   hover:bg-neutral-800 transition-colors border-2 border-black flex items-center justify-center gap-1 shadow-brutal-sm"
+						>
+							🗺️ Google Maps
+						</a>
+						<a
+							href={getOsmUrl(result.winner.place)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="bg-brand-cream text-black py-1.5 px-2 text-xs font-bold font-mono text-center
+								   hover:bg-white transition-colors border-2 border-black flex items-center justify-center gap-1 shadow-brutal-sm"
+							title="Buka di OpenStreetMap"
+						>
+							🌐 OSM
+						</a>
+					</div>
 				</div>
 			{:else if result.winner}
 				<div class="text-center bg-brand-lime border-2 border-black p-3 mb-3 shadow-brutal-sm">
@@ -97,6 +120,35 @@
 					<div class="text-2xl">{result.winner.place.emoji}</div>
 					<div class="font-bold text-base mt-1">{result.winner.place.name}</div>
 					<div class="text-xs text-gray-700 mt-0.5">{result.winner.place.vibe}</div>
+					<div class="text-xs text-gray-600 mt-1 font-mono truncate">📍 {result.winner.place.address}</div>
+					<div class="mt-2.5 flex gap-1.5 justify-center">
+						<a
+							href={getMapUrl(result.winner.place)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="flex-1 bg-black text-white py-1.5 px-3 text-xs font-bold font-mono text-center
+								   hover:bg-neutral-800 transition-colors border-2 border-black flex items-center justify-center gap-1 shadow-brutal-sm"
+						>
+							🗺️ Google Maps
+						</a>
+						<a
+							href={getOsmUrl(result.winner.place)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="bg-brand-cream text-black py-1.5 px-2 text-xs font-bold font-mono text-center
+								   hover:bg-white transition-colors border-2 border-black flex items-center justify-center gap-1 shadow-brutal-sm"
+							title="Buka di OpenStreetMap"
+						>
+							🌐 OSM
+						</a>
+					</div>
+				</div>
+			{:else}
+				<div class="text-center bg-brand-veto text-white border-2 border-black p-3 mb-3 shadow-brutal-sm">
+					<div class="text-xs font-bold tracking-widest mb-1">💀 GA ADA TEMPAT LOLOS</div>
+					<div class="text-2xl">💨</div>
+					<div class="font-bold text-base mt-1">Semua Tempat Kena Veto!</div>
+					<div class="text-xs opacity-90 mt-0.5">Kalian mau makan angin atau gimana nih? 😂</div>
 				</div>
 			{/if}
 
@@ -108,7 +160,16 @@
 						<span class="text-lg w-6">{rankMedal(i)}</span>
 						<div class="flex-1 min-w-0">
 							<div class="flex items-center justify-between">
-								<span class="font-bold text-sm truncate">{score.place.name}</span>
+								<div class="flex items-center gap-1.5 truncate">
+									<span class="font-bold text-sm truncate">{score.place.name}</span>
+									<a
+										href={getMapUrl(score.place)}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-xs text-gray-400 hover:text-black flex-none"
+										title="Buka di Maps"
+									>🗺️</a>
+								</div>
 								{#if score.isVetoed}
 									<span class="text-brand-veto text-xs font-bold ml-1">VETO</span>
 								{:else}

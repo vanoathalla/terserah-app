@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import { room } from '$lib/realtimeRoom.svelte';
 
 	const AVATARS = ['😎', '🤙', '🔥', '👾', '🦋', '🐸', '🌙', '⚡', '🍜', '🍔', '🌶️', '🤤'];
@@ -14,6 +16,14 @@
 	// Load saved identity
 	const saved = room.loadIdentity();
 	if (saved) { name = saved.name; }
+
+	onMount(() => {
+		const paramJoin = $page.url.searchParams.get('join');
+		if (paramJoin) {
+			joinCode = paramJoin.trim().toUpperCase().slice(0, 6);
+			mode = 'join';
+		}
+	});
 
 	async function createRoom() {
 		if (!name.trim()) { error = 'Isi nama dulu dong!'; return; }

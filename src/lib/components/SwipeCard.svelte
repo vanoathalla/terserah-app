@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { spring } from 'svelte/motion';
-	import type { Place } from '$lib/mockPlaces';
+	import { getMapUrl, type Place } from '$lib/mockPlaces';
 
 	interface Props {
 		place: Place;
@@ -155,10 +155,19 @@
 			<!-- Vibe -->
 			<p class="text-sm text-gray-700 leading-relaxed line-clamp-3">{place.vibe}</p>
 
-			<!-- Address -->
-			<div class="flex items-center gap-1 text-xs text-gray-500 mt-auto">
+			<!-- Address / Open Map -->
+			<div class="flex items-center gap-1 text-xs text-gray-600 mt-auto">
 				<span>📍</span>
-				<span class="truncate">{place.address}</span>
+				<a
+					href={getMapUrl(place)}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="truncate hover:text-black hover:underline font-mono"
+					onclick={(e) => e.stopPropagation()}
+					title="Buka lokasi di Google Maps"
+				>
+					{place.address} <span class="text-[10px] text-brand-purple font-bold">↗ Maps</span>
+				</a>
 			</div>
 
 			<!-- Tags -->

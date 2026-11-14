@@ -267,6 +267,26 @@ export function handleConnection(ws: WebSocket, roomCode: string) {
 			return;
 		}
 
+		// ── RESET_ROOM (Host restarts to lobby) ───────────────
+		if (type === 'RESET_ROOM') {
+			if (room.hostId !== myPlayerId) return;
+			stopTimer(room);
+			room.phase = 'lobby';
+			room.places = [];
+			room.actions = [];
+			room.timeLeft = 45;
+			for (const p of room.players.values()) {
+				p.swipedCount = 0;
+			}
+			broadcastAll(room, {
+				type: 'ROOM_STATE',
+				players: [...room.players.values()],
+				phase: 'lobby',
+				roomCode: room.code
+			});
+			return;
+		}
+
 		// ── PLAYER_ACTION ─────────────────────────────────────
 		if (type === 'PLAYER_ACTION') {
 			const action = msg.action as PlayerAction;
