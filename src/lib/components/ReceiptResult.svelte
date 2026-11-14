@@ -249,7 +249,7 @@
 			<div class="text-center text-xs text-gray-400">
 				<div class="mb-1">— terima kasih sudah makan! —</div>
 				<div class="font-bold text-black tracking-wider">TERSERAH! 🎰</div>
-				<div class="text-[10px] mt-0.5">terserah.vercel.app</div>
+				<div class="text-[10px] mt-0.5">terserah-app-production.up.railway.app</div>
 			</div>
 		</div>
 
