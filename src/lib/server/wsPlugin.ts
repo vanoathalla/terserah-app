@@ -1,27 +1,36 @@
 // ============================================================
-// wsPlugin.ts — Vite plugin to handle WebSocket upgrades
-// Intercepts HTTP upgrade requests before Vite handles them.
+// wsPlugin.ts — Vite dev plugin
+// Intercepts WebSocket upgrades at /ws/[CODE] during development.
+// Production is handled by server.js + build/ws-server.js.
 // ============================================================
 
 import type { Plugin } from 'vite';
 import type { IncomingMessage } from 'http';
-import type { Server } from 'net';
+import type { Socket } from 'net';
 
 export function websocketPlugin(): Plugin {
 	return {
 		name: 'terserah-websocket',
-		configureServer(server) {
-			server.httpServer?.on('upgrade', async (req: IncomingMessage, socket: Server, head: Buffer) => {
+		configureServer(viteServer) {
+			viteServer.httpServer?.on('upgrade', async (
+				req: IncomingMessage,
+				socket: Socket,
+				head: Buffer
+			) => {
 				const url = req.url ?? '';
 				const match = url.match(/^\/ws\/([A-Z0-9]{6})$/);
-				if (!match) return; // Not our WS route, let Vite handle it
+
+				// Skip Vite HMR websocket
+				if (!match || req.headers['sec-websocket-protocol'] === 'vite-hmr') return;
 
 				const roomCode = match[1];
-				const { WebSocketServer } = await import('ws');
-				const { handleConnection } = await import('./roomServer.js');
+				const [{ WebSocketServer }, { handleConnection }] = await Promise.all([
+					import('ws'),
+					import('./roomServer.js')
+				]);
 
 				const wss = new WebSocketServer({ noServer: true });
-				wss.handleUpgrade(req, socket as unknown as import('net').Socket, head as unknown as Buffer, (ws) => {
+				wss.handleUpgrade(req, socket, head, (ws) => {
 					handleConnection(ws, roomCode);
 				});
 			});
